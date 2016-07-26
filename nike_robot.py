@@ -29,7 +29,7 @@ LOGIN_URL = 'https://unite.nike.com/loginWithSetCookie?locale=zh_CN&backendEnvir
 # 提交订单地址
 PUT_ORDER_URL = 'https://secure-store.nike.com/ap/services/jcartService?callback=nike_Cart_handleJCartResponse' \
                 '&action=addItem&lang_locale=zh_CN&country=CN&catalogId=4&' \
-                'siteId=94&passcode=null&sizeType=null&qty=1&rt=json&view=3&displaySize=42.5'
+                'siteId=94&passcode=null&sizeType=null&qty=1&rt=json&view=3&displaySize=43'
 MAX_FAIL_TIMES = 100  # 每个下单线程的最大失败重试次数
 MAX_RETRY_TIMES = 200  # 每个下单线程的重新提交订单次数
 # 是否开启调试模式
@@ -220,7 +220,7 @@ def parse_product_info(product_detail_url):
                                 # if shoe_info_matcher:
                                 #     logging.info(shoe_info_matcher.groups())
                             logging.info('获取商品信息完成, 耗时%s秒', (end - start))
-                            order_param.productId = raw_input('请选择你要下单的鞋子ID:\n')
+                            order_param.productId = raw_input('请选择你要下单的鞋子ID:')
                             if raw_pd_id != order_param.productId:
                                 # 要重新请求一次
                                 new_res = session.get(product_detail_url.replace(raw_pd_id, order_param.productId))
@@ -241,7 +241,7 @@ if __name__ == '__main__':
     password = raw_input('请输入你的nike密码:')
     nike_login_param = NikeLoginParam(user_name, password, 'HlHa2Cje3ctlaOqnxvgZXNaAs7T9nAuH')
     login(nike_login_param)
-    pd_url = raw_input('请输入鞋子地址:\n')
+    pd_url = raw_input('请输入鞋子地址:')
     # pd_url = 'http://store.nike.com/cn/zh_cn/pd/' \
     #          'kobe-11-elite-low-%E7%94%B7%E5%AD%90%E7%AF%AE%E7%90%83%E9%9E%8B/pid-11053644/pgid-11181196'
     order_param = parse_product_info(pd_url)
