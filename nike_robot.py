@@ -233,6 +233,9 @@ def parse_product_info(product_detail_url):
                             return order_param
         else:
             logging.error('获取商品信息失败[%s]!', status_code)
+            # page gone 鞋子已经售罄了或者Nike下掉该款鞋子的介绍页
+            if status_code == 410:
+                logging.warn("抱歉, 您查找的商品已不存在")
             sys.exit(1)  # 没有获取到商品信息,直接退出
 
 
