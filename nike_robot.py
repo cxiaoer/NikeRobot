@@ -39,7 +39,7 @@ PUT_ORDER_URL = 'https://secure-store.nike.com/ap/services/jcartService?' \
 MAX_FAIL_TIMES = 100  # 每个下单线程的最大失败重试次数
 MAX_RETRY_TIMES = 200  # 每个下单线程的重新提交订单次数
 # 是否开启调试模式
-DEBUG = True
+DEBUG = False
 
 # 全局session
 session = requests.Session()
