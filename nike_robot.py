@@ -29,8 +29,7 @@ HEADERS = {
                   'Chrome/51.0.2704.106 Safari/537.36'
 }
 # 登陆check 地址
-LOGIN_URL = 'https://unite.nike.com/loginWithSetCookie?'\
-            'locale=zh_CN&backendEnvironment=default'
+LOGIN_URL = 'https://www.nike.com/profile/login?Content-Locale=zh_CN'
 # 提交订单地址
 PUT_ORDER_URL = 'https://secure-store.nike.com/ap/services/jcartService?' \
                 'callback=nike_Cart_handleJCartResponse' \
@@ -40,7 +39,7 @@ PUT_ORDER_URL = 'https://secure-store.nike.com/ap/services/jcartService?' \
 MAX_FAIL_TIMES = 100  # 每个下单线程的最大失败重试次数
 MAX_RETRY_TIMES = 200  # 每个下单线程的重新提交订单次数
 # 是否开启调试模式
-DEBUG = False
+DEBUG = True
 
 # 全局session
 session = requests.Session()
@@ -54,19 +53,19 @@ class NikeLoginParam(object):
 
     def __init__(self, username, password, client_id):
         super(NikeLoginParam, self).__init__()
-        self.username = username
+        self.login = username
         self.password = password
-        self.client_id = client_id
-        self.grant_type = 'password'
-        self.keepMeLoggedIn = True
-        self.ux_id = 'com.nike.commerce.nikedotcom.web'
+        # self.client_id = client_id
+        # self.grant_type = 'password'
+        self.rememberMe = True
+        # self.ux_id = 'com.nike.commerce.nikedotcom.web'
 
     def to_json(self):
         return json.dumps(self, default=lambda o: o.__dict__,
                           sort_keys=True, indent=4)
 
     def __repr__(self):
-        return '此次登陆用户名:%s, 密码:%s' % (self.username, self.password)
+        return '此次登陆用户名:%s, 密码:%s' % (self.login, self.password)
 
 
 class AddToCartParam(object):
@@ -168,19 +167,21 @@ def login(param):
     logging.info('开始登陆Nike官网了.......')
     session.get('http://www.nike.com/cn/zh_cn')
     start = time.time()
-    res = session.post(LOGIN_URL, data=param.to_json(), headers=HEADERS)
+    res = session.post(LOGIN_URL, data=param.__dict__, headers=HEADERS)
     end = time.time()
     status_code = res.status_code
     if status_code == 200:
         content = res.content
-        key_token = json.loads(content)['access_token']
-        if json.loads(content)['access_token'] is not None:
+        if DEBUG:
+            pdb.set_trace()
+        # key_token = json.loads(content)['access_token']
+        # if json.loads(content)['access_token'] is not None:
             # logging.info(res.cookies)
             logging.info('登陆Nike官网成功,耗时%s秒', (end - start))
     else:
         key_token = None
         logging.error('登陆Nike官网失败[%s]!', status_code)
-    return key_token
+    # return 
 
 
 # 通过产品页面获取产品信息, 构造提交订单参数
