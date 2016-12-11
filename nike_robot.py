@@ -97,6 +97,27 @@ class ShoeInfo(object):
                                                      self.info_url)
 
 
+class RegexMatcher(object):
+    """正则匹配工具类"""
+
+    capture_group_name_reg = ''
+
+    groups = []
+
+    def __init__(self, regex):
+        self.__parse_reg(self, regex)
+        self.regex = re.compile(regex)
+
+    def __parse_reg(self, regex):
+        pass
+
+    def match(self, content):
+        pass
+
+    def get_value(self, group_name):
+        return ''
+
+
 class AddToCartTask(Thread):
     """添加到购物车线程,主要负责鞋子添加到购物车中, 抢鞋的时候,添加购物车成功基本就算抢到了"""
 
