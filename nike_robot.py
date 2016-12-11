@@ -13,8 +13,7 @@ import json
 import time
 from threading import Thread
 import re
-import sys
-import redis
+# import redis
 import pdb
 
 logging.basicConfig(level=logging.INFO,
@@ -34,7 +33,7 @@ LOGIN_URL = 'https://www.nike.com/profile/login?Content-Locale=zh_CN'
 PUT_ORDER_URL = 'https://secure-store.nike.com/ap/services/jcartService?' \
                 'callback=nike_Cart_handleJCartResponse' \
                 '&action=addItem&lang_locale=zh_CN&country=CN&catalogId=4&' \
-                'siteId=94&passcode=null&sizeType=null&qty=1&rt=json&'\
+                'siteId=94&passcode=null&sizeType=null&qty=1&rt=json&' \
                 'view=3&displaySize=43'
 MAX_FAIL_TIMES = 100  # 每个下单线程的最大失败重试次数
 MAX_RETRY_TIMES = 200  # 每个下单线程的重新提交订单次数
@@ -43,9 +42,11 @@ DEBUG = False
 
 # 全局session
 session = requests.Session()
+
+
 # 添加购物车订阅实例
-r = redis.StrictRedis('localhost', 6379)
-p = r.pubsub()
+# r = redis.StrictRedis('localhost', 6379)
+# p = r.pubsub()
 
 
 class NikeLoginParam(object):
@@ -109,21 +110,22 @@ class AddToCartTask(Thread):
         fail_times = 1  # 订单提交异常失败次数
 
         HEADERS['Referer'] = self.pd_url  # 带上Referer试试能否成功, 不带这个头, 会一直报429
-        p.subscribe('addToCart-notice-channel')
+        # p.subscribe('addToCart-notice-channel')
         while True:
             if fail_times >= MAX_FAIL_TIMES:
                 break
             if retry_times >= MAX_RETRY_TIMES:
                 break
             # 某个线程下单成功了, 所以直接退出
-            message = p.get_message()
+            # message = p.get_message()
+            message = None
             if message:
                 if message['data'] == 'SUCCESS' or message['data'] == 'FAIL':
                     break
             start = time.time()
             logging.info('[第%s次] 开始尝试添加到购物车了', retry_times)
             add_to_cart_url = PUT_ORDER_URL + \
-                '&_=' + str(int(1000 * time.time()))
+                              '&_=' + str(int(1000 * time.time()))
             if DEBUG:
                 pdb.set_trace()
             res = session.get(
@@ -141,7 +143,7 @@ class AddToCartTask(Thread):
                     if res_status == 'success':  # 添加到购物车成功
                         logging.info('[第%s次] 恭喜添加购物车成功.......; 耗时%s秒',
                                      retry_times, (end - start))
-                        r.publish('addToCart-notice-channel', 'SUCCESS')
+                        # r.publish('addToCart-notice-channel', 'SUCCESS')
                         break
                     elif res_status == 'wait':  # 下单需要排队,继续下单
                         logging.info("排队中......")
@@ -153,7 +155,7 @@ class AddToCartTask(Thread):
                         if fail_message_match:
                             logging.info('添加购物车失败; 原因:%s',
                                          fail_message_match.group(1))
-                            r.publish('addToCart-notice-channel', 'FAIL')
+                            # r.publish('addToCart-notice-channel', 'FAIL')
                             break
                     retry_times += 1
             else:
@@ -171,97 +173,33 @@ def login(param):
     end = time.time()
     status_code = res.status_code
     if status_code == 200:
-        content = res.content
         if DEBUG:
             pdb.set_trace()
-        # key_token = json.loads(content)['access_token']
-        # if json.loads(content)['access_token'] is not None:
+            # key_token = json.loads(content)['access_token']
+            # if json.loads(content)['access_token'] is not None:
             # logging.info(res.cookies)
             logging.info('登陆Nike官网成功,耗时%s秒', (end - start))
     else:
-        key_token = None
+        # key_token = None
         logging.error('登陆Nike官网失败[%s]!', status_code)
-    # return 
 
 
-# 通过产品页面获取产品信息, 构造提交订单参数
-def parse_product_info(product_detail_url):
-    logging.info("开始访问:%s 获取商品信息.", product_detail_url)
-    raw_pd_id_pattern = re.compile('pid-(\d{8})\/')
-    pd_id_match = raw_pd_id_pattern.search(product_detail_url)
-    if pd_id_match:
-        raw_pd_id = pd_id_match.group(1)
-        start = time.time()
-        res = session.get(product_detail_url, headers=HEADERS)
-        end = time.time()
-        status_code = res.status_code
-        if status_code == 200:
-            content = res.content
-            # 匹配出鞋子的基本信息; 名称以及43码对应的货号
-            shoe_base_info_pattern = re.compile('name="price"\svalue="(?P<price>.*?)"[.|\s\S]*name="line1" '
-                                                'value="(?P<name>.*?)"[.|\s\S]*name="line2" '
-                                                'value="(?P<category>.*?)"\/>[.|\s\S]*"displaySize":"43","sku":"(?P<id>\d{8})"')
-            shoe_base_info_match = shoe_base_info_pattern.search(content)
-            if shoe_base_info_match:
-                shoe_name = shoe_base_info_match.group('name')
-                shoe_category = shoe_base_info_match.group('category')
-                shoe_price = shoe_base_info_match.group('price')
-                shoe_id = shoe_base_info_match.group('id')
-                order_param = AddToCartParam(
-                    0, shoe_price, shoe_id, shoe_name, shoe_category)
-                logging.info('鞋子基本信息如下:')
-                logging.info('名称:%s', shoe_name)
-                logging.info('价格:%s', shoe_price)
-                logging.info('--------------')
-                # 抠出正还在售的鞋子清单正则
-                in_stock_list_pattern = re.compile(
-                    '<ul\sdata-status="IN_STOCK".*>(?P<in_stock_list>[.|\s\S]*?)<\/ul>')
-                in_stock_list_matcher = in_stock_list_pattern.search(content)
-                if in_stock_list_matcher:
-                    in_stock_list = in_stock_list_matcher.group(
-                        'in_stock_list')
-                    if in_stock_list:
-                        # logging.info(in_stock_list)
-                        # 匹配出每个在售鞋子的信息, 比如id, 颜色等等
-                        shoe_info_pattern = re.compile(
-                            '<a\shref="(?P<info_url>.*?)"\sdata-productid="(?P<info_id>\d{8})"\stitle="(?P<shoe_color>.*?)"')
-                        shoe_info_matcher = shoe_info_pattern.finditer(
-                            in_stock_list)
-                        if shoe_info_matcher:
-                            logging.info('下面鞋子还有货:')
-                            for matcher in shoe_info_matcher:
-                                shoe_info = ShoeInfo(matcher.group('info_url'), matcher.group('info_id'),
-                                                     matcher.group('shoe_color'))
-                                # logging.info(shoe_info)
-                                logging.info('鞋子ID: %s', shoe_info.info_id)
-                                logging.info('鞋子颜色: %s ', shoe_info.shoe_color)
-                                logging.info('鞋子地址:%s', shoe_info.info_url)
-                                logging.info('--------------')
-                                # if shoe_info_matcher:
-                                #     logging.info(shoe_info_matcher.groups())
-                            logging.info('获取商品信息完成, 耗时%s秒', (end - start))
-                            order_param.productId = raw_input('请选择你要下单的鞋子ID:')
-                            if raw_pd_id != order_param.productId:
-                                # 要重新请求一次
-                                new_res = session.get(product_detail_url.replace(
-                                    raw_pd_id, order_param.productId))
-                                # 匹配出鞋子的基本信息; 名称以及43码对应的货号
-                                common_sku_pattern = re.compile(
-                                    '"displaySize":"43","sku":"(?P<id>\d{8})"')
-                                common_sku_match = common_sku_pattern.search(
-                                    new_res.content)
-                                if common_sku_match:
-                                    order_param.skuId = common_sku_match.group(
-                                        'id')
-                                    order_param.skuAndSize = '%s:43' % order_param.skuId
-                            return order_param
-        else:
-            logging.error('获取商品信息失败[%s]!', status_code)
-            # page gone 鞋子已经售罄了或者Nike下掉该款鞋子的介绍页
-            if status_code == 410:
-                logging.warn("抱歉, 您查找的商品已不存在")
-            sys.exit(1)  # 没有获取到商品信息,直接退出
+# 清洗html; 去掉空格以及script标签
+def clean_html(html_content):
+    return html_content
 
+
+def get_order_param(product_index_url):
+    pass
+    # selected_product_id=
+
+
+def reg_match(content, regex):
+    pass
+
+# List<Dict>
+# new RegMatcher(regex).matcher(content).get_value('')
+# new RegMatcher(regex).matcher(content).get
 
 if __name__ == '__main__':
     user_name = raw_input('请输入你的nike用户名:')
@@ -270,9 +208,7 @@ if __name__ == '__main__':
         user_name, password, 'HlHa2Cje3ctlaOqnxvgZXNaAs7T9nAuH')
     login(nike_login_param)
     pd_url = raw_input('请输入鞋子地址:')
-    # pd_url = 'http://store.nike.com/cn/zh_cn/pd/' \
-    #          'kobe-11-elite-low-%E7%94%B7%E5%AD%90%E7%AF%AE%E7%90%83%E9%9E%8B/pid-11053644/pgid-11181196'
-    order_param = parse_product_info(pd_url)
+    order_param = None
     threads = []
     for i in range(1):
         thread = AddToCartTask(order_param, pd_url)
