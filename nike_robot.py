@@ -48,8 +48,6 @@ r = redis.StrictRedis('localhost', 6379)
 p = r.pubsub()
 
 
-
-
 class NikeLoginParam(object):
     """登录时, 请求body体参数"""
 
