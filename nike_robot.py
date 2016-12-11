@@ -3,7 +3,7 @@
 """
 redis (2.10.5)
 requests (2.9.1)
-python (2.7.10)
+python (3.5.2)
 
 """
 
@@ -197,17 +197,18 @@ def get_order_param(product_index_url):
 def reg_match(content, regex):
     pass
 
+
 # List<Dict>
 # new RegMatcher(regex).matcher(content).get_value('')
 # new RegMatcher(regex).matcher(content).get
 
 if __name__ == '__main__':
-    user_name = raw_input('请输入你的nike用户名:')
-    password = raw_input('请输入你的nike密码:')
+    user_name = input('请输入你的nike用户名:')
+    password = input('请输入你的nike密码:')
     nike_login_param = NikeLoginParam(
-        user_name, password, 'HlHa2Cje3ctlaOqnxvgZXNaAs7T9nAuH')
+        user_name, password, '')
     login(nike_login_param)
-    pd_url = raw_input('请输入鞋子地址:')
+    pd_url = input('请输入鞋子地址:')
     order_param = None
     threads = []
     for i in range(1):
