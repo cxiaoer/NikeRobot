@@ -21,6 +21,7 @@ logging.basicConfig(level=logging.INFO,
                            '%(threadName)s  '
                            '%(levelname)s  '
                            '%(message)s')
+LOG = logging.getLogger(__name__)
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) '
@@ -119,8 +120,6 @@ class RegexMatcher(object):
         for match in self.regex.finditer(content):
             d = {}
             for group in self.groups:
-                print(group)
-                print(match.group(group))
                 d[group] = match.group(group)
             if len(d) > 0:
                 self.value_dict_list.append(d)
@@ -133,11 +132,16 @@ class RegexMatcher(object):
         for d in self.value_dict_list:
             result.append(d[group_name])
         if len(result) == 0:
-            return None
+            raise MatchNoResult
         return result[0]
 
     def get_values(self, group_name):
         pass
+
+
+class MatchNoResult(Exception):
+    """docstring for MatchNoResult"""
+    pass
 
 
 class AddToCartTask(Thread):
@@ -166,50 +170,50 @@ class AddToCartTask(Thread):
                 if message['data'] == 'SUCCESS' or message['data'] == 'FAIL':
                     break
             start = time.time()
-            logging.info('[第%s次] 开始尝试添加到购物车了', retry_times)
+            LOG.info('[第%s次] 开始尝试添加到购物车了', retry_times)
             add_to_cart_url = PUT_ORDER_URL + \
                 '&_=' + str(int(1000 * time.time()))
             if DEBUG:
                 pdb.set_trace()
             res = session.get(
                 add_to_cart_url, params=self.param.__dict__, headers=HEADERS)
-            logging.info(res.url)
+            LOG.info(res.url)
             end = time.time()
             status_code = res.status_code
             # r.publish('addToCart-notice-channel', 'SUCCESS')
             if status_code == 200:
                 res_status_pattern = re.compile('"status" :"(?P<status>.*?)"')
-                logging.info(res.content)
+                LOG.info(res.content)
                 res_status_match = res_status_pattern.search(res.content)
                 if res_status_match:
                     res_status = res_status_match.group('status')
                     if res_status == 'success':  # 添加到购物车成功
-                        logging.info('[第%s次] 恭喜添加购物车成功.......; 耗时%s秒',
-                                     retry_times, (end - start))
+                        LOG.info('[第%s次] 恭喜添加购物车成功.......; 耗时%s秒',
+                                 retry_times, (end - start))
                         # r.publish('addToCart-notice-channel', 'SUCCESS')
                         break
                     elif res_status == 'wait':  # 下单需要排队,继续下单
-                        logging.info("排队中......")
+                        LOG.info("排队中......")
                     elif res_status == 'failure':
                         # 截取失败信息
                         fail_message_pattern = re.compile('message"\s:"(.*?)"')
                         fail_message_match = fail_message_pattern.search(
                             res.content)
                         if fail_message_match:
-                            logging.info('添加购物车失败; 原因:%s',
-                                         fail_message_match.group(1))
+                            LOG.info('添加购物车失败; 原因:%s',
+                                     fail_message_match.group(1))
                             # r.publish('addToCart-notice-channel', 'FAIL')
                             break
                     retry_times += 1
             else:
-                logging.info('[第%s次] 提交订单异常[%s]!', fail_times, status_code)
+                LOG.info('[第%s次] 提交订单异常[%s]!', fail_times, status_code)
                 fail_times += 1
                 time.sleep(1)  # 隔一秒进行重新提交
 
 
 # 登陆获取关键token参数
 def login(param):
-    logging.info('开始登陆Nike官网了.......')
+    LOG.info('开始登陆Nike官网了.......')
     session.get('http://www.nike.com/cn/zh_cn')
     start = time.time()
     res = session.post(LOGIN_URL, data=param.__dict__, headers=HEADERS)
@@ -220,11 +224,11 @@ def login(param):
             pdb.set_trace()
             # key_token = json.loads(content)['access_token']
             # if json.loads(content)['access_token'] is not None:
-            # logging.info(res.cookies)
-            logging.info('登陆Nike官网成功,耗时%s秒', (end - start))
+            # LOG.info(res.cookies)
+            LOG.info('登陆Nike官网成功,耗时%s秒', (end - start))
     else:
         # key_token = None
-        logging.error('登陆Nike官网失败[%s]!', status_code)
+        LOG.error('登陆Nike官网失败[%s]!', status_code)
 
 
 # 清洗html; 去掉空格以及script标签
@@ -233,8 +237,10 @@ def clean_html(html_content):
 
 
 def get_order_param(product_index_url):
-    pass
-    # selected_product_id=
+    # 从url 中取出默认的pid
+    selected_pid = RegexMatcher('\/pid-(?P<selected_pid>.*?)\/'). \
+        match(product_index_url).get_value('selected_pid')
+    LOG.info('默选pid: %s', selected_pid)
 
 
 def reg_match(content, regex):
@@ -260,4 +266,5 @@ if __name__ == '__main__':
     # for thread in threads:
     #     thread.join()
     print(RegexMatcher('\/pid-(?P<selected_pid>.*?)\/').match(
-        'http://store.nike.com/cn/zh_cn/pd/prime-hype-df-2016-ep-%E7%94%B7%E5%AD%90%E7%AF%AE%E7%90%83%E9%9E%8B/pid-11161556/pgid-11800562').get_value('selected_pid'))
+        'http://store.nike.com/cn/zh_cn/pd/prime-hype-df-2016-ep-%E7%94%B7%E5%AD%90%E7%AF%AE%E7%90%83%E9%9E%8B/pid-11161556/pgid-11800562').get_value(
+        'selected_pid'))
