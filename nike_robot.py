@@ -100,22 +100,44 @@ class ShoeInfo(object):
 class RegexMatcher(object):
     """正则匹配工具类"""
 
-    capture_group_name_reg = ''
-
     groups = []
 
+    value_dict_list = []
+
     def __init__(self, regex):
-        self.__parse_reg(self, regex)
+        self.capture_group_name_reg = re.compile('\(\?P<(?P<group_name>.*?)>')
+        self.__parse_reg(regex)
         self.regex = re.compile(regex)
 
     def __parse_reg(self, regex):
-        pass
+        for match in self.capture_group_name_reg.finditer(regex):
+            self.groups.append(match.group('group_name'))
 
     def match(self, content):
-        pass
+        if content is None:
+            raise AssertionError
+        for match in self.regex.finditer(content):
+            d = {}
+            for group in self.groups:
+                print(group)
+                print(match.group(group))
+                d[group] = match.group(group)
+            if len(d) > 0:
+                self.value_dict_list.append(d)
+        return self
 
     def get_value(self, group_name):
-        return ''
+        if group_name not in self.groups:
+            raise KeyError
+        result = []
+        for d in self.value_dict_list:
+            result.append(d[group_name])
+        if len(result) == 0:
+            return None
+        return result[0]
+
+    def get_values(self, group_name):
+        pass
 
 
 class AddToCartTask(Thread):
@@ -146,7 +168,7 @@ class AddToCartTask(Thread):
             start = time.time()
             logging.info('[第%s次] 开始尝试添加到购物车了', retry_times)
             add_to_cart_url = PUT_ORDER_URL + \
-                              '&_=' + str(int(1000 * time.time()))
+                '&_=' + str(int(1000 * time.time()))
             if DEBUG:
                 pdb.set_trace()
             res = session.get(
@@ -224,16 +246,18 @@ def reg_match(content, regex):
 # new RegMatcher(regex).matcher(content).get
 
 if __name__ == '__main__':
-    user_name = input('请输入你的nike用户名:')
-    password = input('请输入你的nike密码:')
-    nike_login_param = NikeLoginParam(
-        user_name, password, '')
-    login(nike_login_param)
-    pd_url = input('请输入鞋子地址:')
-    order_param = None
-    threads = []
-    for i in range(1):
-        thread = AddToCartTask(order_param, pd_url)
-        thread.start()
-    for thread in threads:
-        thread.join()
+    # user_name = input('请输入你的nike用户名:')
+    # password = input('请输入你的nike密码:')
+    # nike_login_param = NikeLoginParam(
+    #     user_name, password, '')
+    # login(nike_login_param)
+    # pd_url = input('请输入鞋子地址:')
+    # order_param = None
+    # threads = []
+    # for i in range(1):
+    #     thread = AddToCartTask(order_param, pd_url)
+    #     thread.start()
+    # for thread in threads:
+    #     thread.join()
+    print(RegexMatcher('\/pid-(?P<selected_pid>.*?)\/').match(
+        'http://store.nike.com/cn/zh_cn/pd/prime-hype-df-2016-ep-%E7%94%B7%E5%AD%90%E7%AF%AE%E7%90%83%E9%9E%8B/pid-11161556/pgid-11800562').get_value('selected_pid'))
