@@ -241,10 +241,8 @@ def get_order_param(product_index_url):
     selected_pid = RegexMatcher('\/pid-(?P<selected_pid>.*?)\/'). \
         match(product_index_url).get_value('selected_pid')
     LOG.info('默选pid: %s', selected_pid)
+    # 用户选择颜色
 
-
-def reg_match(content, regex):
-    pass
 
 
 # List<Dict>
