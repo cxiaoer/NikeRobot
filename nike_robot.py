@@ -16,7 +16,7 @@ import re
 # import redis
 import pdb
 
-logging.basicConfig(level=logging.INFO,
+logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s  '
                            '%(threadName)s  '
                            '%(levelname)s  '
@@ -39,7 +39,7 @@ PUT_ORDER_URL = 'https://secure-store.nike.com/ap/services/jcartService?' \
 MAX_FAIL_TIMES = 100  # 每个下单线程的最大失败重试次数
 MAX_RETRY_TIMES = 200  # 每个下单线程的重新提交订单次数
 # 是否开启调试模式
-DEBUG = False
+DEBUG = True
 
 # 全局session
 session = requests.Session()
@@ -129,6 +129,8 @@ class RegexMatcher(object):
         if group_name not in self.groups:
             raise KeyError
         result = []
+        if DEBUG:
+            pdb.set_trace()
         for d in self.value_dict_list:
             result.append(d[group_name])
         if len(result) == 0:
@@ -137,6 +139,9 @@ class RegexMatcher(object):
 
     def get_values(self, group_name):
         pass
+
+    def __str__(self):
+        return self.value_dict_list
 
 
 class MatchNoResult(Exception):
@@ -172,7 +177,7 @@ class AddToCartTask(Thread):
             start = time.time()
             LOG.info('[第%s次] 开始尝试添加到购物车了', retry_times)
             add_to_cart_url = PUT_ORDER_URL + \
-                '&_=' + str(int(1000 * time.time()))
+                              '&_=' + str(int(1000 * time.time()))
             if DEBUG:
                 pdb.set_trace()
             res = session.get(
@@ -242,7 +247,32 @@ def get_order_param(product_index_url):
         match(product_index_url).get_value('selected_pid')
     LOG.info('默选pid: %s', selected_pid)
     # 用户选择颜色
-
+    pd_content = session.get(product_index_url).text
+    LOG.info(pd_content)
+    pd_area = RegexMatcher('<div class="color-chips">(?P<area>[\s\S]*?'
+                           'data-status="IN_STOCK"[\s\S]*?)</div>'). \
+        match(pd_content).get_value('area')
+    LOG.debug('产品区域文本:%s', pd_area)
+    LOG.info('提取出的在售信息:%s', RegexMatcher('<a\shref="(?P<pd_url>'
+                                         '[\s\S]*?)"'
+                                         '\sdata-productid="'
+                                         '(?P<pid>\d+)"\stitle="(?P<pd_color>'
+                                         '[\s\S]*?)"[\s\S]*?<\/a>').
+             match(pd_area))
+    user_select_pid = input('请输入你要选择的pd_id:')
+    if user_select_pid != selected_pid:
+        pd_content = session.get('').text  # 重新获取一次其他参数
+    # 构造订单参数
+    param_area = RegexMatcher('<form\s*?action=""\s*?method="post"\s*?'
+                              'class="add-to-cart-form nike-buying-tools">'
+                              '(?P<param_area>[\s\S]*?)</form>'). \
+        match(pd_content). \
+        get_value('param_area')
+    LOG.debug('提交订单参数区:%s', param_area)
+    # 通用参数
+    RegexMatcher('<input\s*?type="hidden"\s*?name="(?P<key>.*?)"'
+                 '\s*?(value=(?P<value>.*?))?\s*?/>').match(param_area)
+    # 用户选择尺码和大小
 
 
 # List<Dict>
@@ -263,6 +293,5 @@ if __name__ == '__main__':
     #     thread.start()
     # for thread in threads:
     #     thread.join()
-    print(RegexMatcher('\/pid-(?P<selected_pid>.*?)\/').match(
-        'http://store.nike.com/cn/zh_cn/pd/prime-hype-df-2016-ep-%E7%94%B7%E5%AD%90%E7%AF%AE%E7%90%83%E9%9E%8B/pid-11161556/pgid-11800562').get_value(
-        'selected_pid'))
+    get_order_param(
+        'http://store.nike.com/cn/zh_cn/pd/zoom-all-out-low-%E7%94%B7%E5%AD%90%E8%B7%91%E6%AD%A5%E9%9E%8B/pid-11241589/pgid-11464061')
