@@ -14,6 +14,8 @@ import time
 from threading import Thread
 import re
 # import redis
+import sys
+import random
 import pdb
 
 logging.basicConfig(level=logging.DEBUG,
@@ -31,11 +33,8 @@ HEADERS = {
 # 登陆check 地址
 LOGIN_URL = 'https://www.nike.com/profile/login?Content-Locale=zh_CN'
 # 提交订单地址
-PUT_ORDER_URL = 'https://secure-store.nike.com/ap/services/jcartService?' \
-                'callback=nike_Cart_handleJCartResponse' \
-                '&action=addItem&lang_locale=zh_CN&country=CN&catalogId=4&' \
-                'siteId=94&passcode=null&sizeType=null&qty=1&rt=json&' \
-                'view=3&displaySize=43'
+PUT_ORDER_URL = 'https://secure-store.nike.com/ap/services/' \
+                'jcartService?&qty=1&rt=json&view=3&'
 MAX_FAIL_TIMES = 100  # 每个下单线程的最大失败重试次数
 MAX_RETRY_TIMES = 200  # 每个下单线程的重新提交订单次数
 # 是否开启调试模式
@@ -44,10 +43,10 @@ DEBUG = False
 # 全局session
 session = requests.Session()
 
-
 # 添加购物车订阅实例
 # r = redis.StrictRedis('localhost', 6379)
 # p = r.pubsub()
+is_add_cart_success = False
 
 
 class NikeLoginParam(object):
@@ -70,17 +69,18 @@ class NikeLoginParam(object):
         return '此次登陆用户名:%s, 密码:%s' % (self.login, self.password)
 
 
-class AddToCartParam(object):
-    """下单请求参数"""
-
-    def __init__(self, product_id, price, sku_id, line1, line2):
-        super(AddToCartParam, self).__init__()
-        self.productId = product_id
-        self.price = price
-        self.skuId = sku_id
-        self.skuAndSize = '%s:43' % sku_id
-        self.line1 = line1
-        self.line2 = line2
+#
+# class AddToCartParam(object):
+#     """下单请求参数"""
+#
+#     def __init__(self, product_id, price, sku_id, line1, line2):
+#         super(AddToCartParam, self).__init__()
+#         self.productId = product_id
+#         self.price = price
+#         self.skuId = sku_id
+#         self.skuAndSize = '%s:43' % sku_id
+#         self.line1 = line1
+#         self.line2 = line2
 
 
 class ShoeInfo(object):
@@ -171,62 +171,53 @@ class AddToCartTask(Thread):
         self.pd_url = pd_url
 
     def run(self):
+        global is_add_cart_success
         retry_times = 1  # 尝试提交订单次数
-        fail_times = 1  # 订单提交异常失败次数
 
         HEADERS['Referer'] = self.pd_url  # 带上Referer试试能否成功, 不带这个头, 会一直报429
         # p.subscribe('addToCart-notice-channel')
         while True:
-            if fail_times >= MAX_FAIL_TIMES:
+            if is_add_cart_success:
                 break
-            if retry_times >= MAX_RETRY_TIMES:
-                break
-            # 某个线程下单成功了, 所以直接退出
-            # message = p.get_message()
-            message = None
-            if message:
-                if message['data'] == 'SUCCESS' or message['data'] == 'FAIL':
-                    break
             start = time.time()
             LOG.info('[第%s次] 开始尝试添加到购物车了', retry_times)
             add_to_cart_url = PUT_ORDER_URL + \
-                '&_=' + str(int(1000 * time.time()))
+                              '_=' + str(int(1000 * time.time()))
             if DEBUG:
                 pdb.set_trace()
             res = session.get(
-                add_to_cart_url, params=self.param.__dict__, headers=HEADERS)
+                add_to_cart_url, params=self.param, headers=HEADERS)
             LOG.info(res.url)
             end = time.time()
             status_code = res.status_code
             # r.publish('addToCart-notice-channel', 'SUCCESS')
             if status_code == 200:
                 res_status_pattern = re.compile('"status" :"(?P<status>.*?)"')
-                LOG.info(res.content)
-                res_status_match = res_status_pattern.search(res.content)
+                LOG.info(res.text)
+                res_status_match = res_status_pattern.search(res.text)
                 if res_status_match:
                     res_status = res_status_match.group('status')
                     if res_status == 'success':  # 添加到购物车成功
-                        LOG.info('[第%s次] 恭喜添加购物车成功.......; 耗时%s秒',
-                                 retry_times, (end - start))
+                        LOG.info('恭喜添加购物车成功.......; 耗时%s秒', (end - start))
+                        is_add_cart_success = True
                         # r.publish('addToCart-notice-channel', 'SUCCESS')
                         break
                     elif res_status == 'wait':  # 下单需要排队,继续下单
                         LOG.info("排队中......")
+                        time.sleep(random.uniform(2.0, 3.0))
                     elif res_status == 'failure':
                         # 截取失败信息
                         fail_message_pattern = re.compile('message"\s:"(.*?)"')
                         fail_message_match = fail_message_pattern.search(
-                            res.content)
+                            res.text)
                         if fail_message_match:
                             LOG.info('添加购物车失败; 原因:%s',
                                      fail_message_match.group(1))
                             # r.publish('addToCart-notice-channel', 'FAIL')
-                            break
-                    retry_times += 1
-            else:
-                LOG.info('[第%s次] 提交订单异常[%s]!', fail_times, status_code)
-                fail_times += 1
-                time.sleep(1)  # 隔一秒进行重新提交
+                            sys.exit(1)
+            LOG.info('提交订单异常[%s]!', status_code)
+            time.sleep(1)  # 隔一秒进行重新提交
+            retry_times += 1
 
 
 # 登陆获取关键token参数
@@ -243,7 +234,7 @@ def login(param):
             # key_token = json.loads(content)['access_token']
             # if json.loads(content)['access_token'] is not None:
             # LOG.info(res.cookies)
-            LOG.info('登陆Nike官网成功,耗时%s秒', (end - start))
+        LOG.info('登陆Nike官网成功,耗时%s秒', (end - start))
     else:
         # key_token = None
         LOG.error('登陆Nike官网失败[%s]!', status_code)
@@ -255,6 +246,9 @@ def clean_html(html_content):
 
 
 def get_order_param(product_index_url):
+    param_d = {'callback': 'nike_Cart_handleJCartResponse',
+               'passcode': 'null', 'sizeType': 'null'}
+
     # 从url 中取出默认的pid
     selected_pid = RegexMatcher('\/pid-(?P<selected_pid>.*?)\/'). \
         match(product_index_url).get_value('selected_pid')
@@ -287,14 +281,17 @@ def get_order_param(product_index_url):
     # 通用参数
     common_param_matcher = RegexMatcher('<input\s*?type="hidden"\s*?name="'
                                         '(?P<key>.*?)"'
-                                        '\s*?(value=(?P<value>.*?))?\s*?/>'). \
+                                        '\s*?(value="(?P<value>.*?)")?\s*?/>'). \
         match(param_area)
     LOG.debug('通用参数信息:%s', common_param_matcher)
-    param_d = {}
+
     for d in common_param_matcher.get_values(''):
         if len(d) is not 2:
             continue
-        param_d[d['key']] = d['value']
+        value = d['value']
+        if value is None or len(value) == 0:
+            value = 'null'
+        param_d[d['key']] = value
     LOG.info(str(param_d))
     # 用户选择尺码和大小
     size_matcher = RegexMatcher('<option\s(?:class=\"(?P<extra>.*?)\")?\s'
@@ -311,25 +308,26 @@ def get_order_param(product_index_url):
     sku_id = input('请选择你需要尺码对应的sku_id: ')
     d = size_matcher.find_with_arg(sku_id=sku_id, )
     LOG.info(str(d))
+    param_d['skuId'] = sku_id
+    param_d['displaySize'] = d['size']  # 有可能要改?????
+    param_d['skuAndSize'] = '%s:%s' % (sku_id, d['size'])
 
+    return param_d
 
-# List<Dict>
-# new RegMatcher(regex).matcher(content).get_value('')
-# new RegMatcher(regex).matcher(content).get
 
 if __name__ == '__main__':
-    # user_name = input('请输入你的nike用户名:')
-    # password = input('请输入你的nike密码:')
-    # nike_login_param = NikeLoginParam(
-    #     user_name, password, '')
-    # login(nike_login_param)
-    # pd_url = input('请输入鞋子地址:')
-    # order_param = None
-    # threads = []
-    # for i in range(1):
-    #     thread = AddToCartTask(order_param, pd_url)
-    #     thread.start()
-    # for thread in threads:
-    #     thread.join()
-    get_order_param(
-        'http://store.nike.com/cn/zh_cn/pd/zoom-all-out-low-%E7%94%B7%E5%AD%90%E8%B7%91%E6%AD%A5%E9%9E%8B/pid-11241589/pgid-11464061')
+    user_name = input('请输入你的nike用户名:')
+    password = input('请输入你的nike密码:')
+    nike_login_param = NikeLoginParam(
+        user_name, password, '')
+    login(nike_login_param)
+    pd_url = input('请输入鞋子地址:')
+    order_param = get_order_param(pd_url)
+    threads = []
+    for i in range(1):
+        thread = AddToCartTask(order_param, pd_url)
+        thread.start()
+    for thread in threads:
+        thread.join()
+        # get_order_param(
+        #     'http://store.nike.com/cn/zh_cn/pd/zoom-all-out-low-%E7%94%B7%E5%AD%90%E8%B7%91%E6%AD%A5%E9%9E%8B/pid-11241589/pgid-11464061')
