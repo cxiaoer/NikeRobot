@@ -1,7 +1,7 @@
 # coding:utf-8
 
 """
-redis (2.10.5)
+
 requests (2.9.1)
 python (3.5.2)
 
