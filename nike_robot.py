@@ -290,12 +290,12 @@ def get_order_param(product_index_url):
                                         '\s*?(value=(?P<value>.*?))?\s*?/>'). \
         match(param_area)
     LOG.debug('通用参数信息:%s', common_param_matcher)
-    common_param_d = {}
+    param_d = {}
     for d in common_param_matcher.get_values(''):
         if len(d) is not 2:
             continue
-        common_param_d[d['key']] = d['value']
-    LOG.info(str(common_param_d))
+        param_d[d['key']] = d['value']
+    LOG.info(str(param_d))
     # 用户选择尺码和大小
     size_matcher = RegexMatcher('<option\s(?:class=\"(?P<extra>.*?)\")?\s'
                                 '*?name=\"skuId\"\s*?value=\"'
