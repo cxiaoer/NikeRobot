@@ -39,7 +39,7 @@ PUT_ORDER_URL = 'https://secure-store.nike.com/ap/services/jcartService?' \
 MAX_FAIL_TIMES = 100  # 每个下单线程的最大失败重试次数
 MAX_RETRY_TIMES = 200  # 每个下单线程的重新提交订单次数
 # 是否开启调试模式
-DEBUG = True
+DEBUG = False
 
 # 全局session
 session = requests.Session()
@@ -101,11 +101,13 @@ class ShoeInfo(object):
 class RegexMatcher(object):
     """正则匹配工具类"""
 
-    groups = []
+    # groups = []
 
-    value_dict_list = []
+    # value_dict_list = []
 
     def __init__(self, regex):
+        self.groups = []
+        self.value_dict_list = []
         self.capture_group_name_reg = re.compile('\(\?P<(?P<group_name>.*?)>')
         self.__parse_reg(regex)
         self.regex = re.compile(regex)
@@ -138,10 +140,21 @@ class RegexMatcher(object):
         return result[0]
 
     def get_values(self, group_name):
-        pass
+        return self.value_dict_list
+
+    def find_with_arg(self, **kwargs):
+        for d in self.value_dict_list:
+            is_find = True
+            for k, v in kwargs.items():
+                if d[k] != v:
+                    is_find = False
+                    break
+            if is_find:
+                return d
+        return None
 
     def __str__(self):
-        return self.value_dict_list
+        return str(self.value_dict_list)
 
 
 class MatchNoResult(Exception):
@@ -177,7 +190,7 @@ class AddToCartTask(Thread):
             start = time.time()
             LOG.info('[第%s次] 开始尝试添加到购物车了', retry_times)
             add_to_cart_url = PUT_ORDER_URL + \
-                              '&_=' + str(int(1000 * time.time()))
+                '&_=' + str(int(1000 * time.time()))
             if DEBUG:
                 pdb.set_trace()
             res = session.get(
@@ -248,31 +261,49 @@ def get_order_param(product_index_url):
     LOG.info('默选pid: %s', selected_pid)
     # 用户选择颜色
     pd_content = session.get(product_index_url).text
-    LOG.info(pd_content)
+    # LOG.info(pd_content)
     pd_area = RegexMatcher('<div class="color-chips">(?P<area>[\s\S]*?'
                            'data-status="IN_STOCK"[\s\S]*?)</div>'). \
         match(pd_content).get_value('area')
-    LOG.debug('产品区域文本:%s', pd_area)
-    LOG.info('提取出的在售信息:%s', RegexMatcher('<a\shref="(?P<pd_url>'
-                                         '[\s\S]*?)"'
-                                         '\sdata-productid="'
-                                         '(?P<pid>\d+)"\stitle="(?P<pd_color>'
-                                         '[\s\S]*?)"[\s\S]*?<\/a>').
-             match(pd_area))
-    user_select_pid = input('请输入你要选择的pd_id:')
+    # LOG.debug('产品区域文本:%s', pd_area)
+    in_stock_matcher = RegexMatcher('<a\shref="(?P<pd_url>'
+                                    '[\s\S]*?)"'
+                                    '\sdata-productid="'
+                                    '(?P<pid>\d+)"\stitle="(?P<pd_color>'
+                                    '[\s\S]*?)"[\s\S]*?<\/a>').match(pd_area)
+    LOG.info('提取出的在售信息:%s', in_stock_matcher)
+    user_select_pid = input('请输入你要选择的pid: ')
     if user_select_pid != selected_pid:
-        pd_content = session.get('').text  # 重新获取一次其他参数
+        new_pd_url = in_stock_matcher.find_with_arg({'pid': user_select_pid})
+        pd_content = session.get(new_pd_url).text  # 重新获取一次其他参数
     # 构造订单参数
     param_area = RegexMatcher('<form\s*?action=""\s*?method="post"\s*?'
                               'class="add-to-cart-form nike-buying-tools">'
                               '(?P<param_area>[\s\S]*?)</form>'). \
         match(pd_content). \
         get_value('param_area')
-    LOG.debug('提交订单参数区:%s', param_area)
+    # LOG.debug('提交订单参数区:%s', param_area)
     # 通用参数
-    RegexMatcher('<input\s*?type="hidden"\s*?name="(?P<key>.*?)"'
-                 '\s*?(value=(?P<value>.*?))?\s*?/>').match(param_area)
+    common_param_matcher = RegexMatcher('<input\s*?type="hidden"\s*?name="'
+                                        '(?P<key>.*?)"'
+                                        '\s*?(value=(?P<value>.*?))?\s*?/>'). \
+        match(param_area)
+    LOG.debug('通用参数信息:%s', common_param_matcher)
     # 用户选择尺码和大小
+    size_matcher = RegexMatcher('<option\s(?:class=\"(?P<extra>.*?)\")?\s'
+                                '*?name=\"skuId\"\s*?value=\"'
+                                '(?P<sku_id>[\s\S]*?):(?P<size>[\s\S]*?)\"'). \
+        match(param_area)
+    # 去掉售罄的尺码; 格式输出稍微舒服点
+    for d in size_matcher.get_values(''):
+        extra = d['extra']
+        if extra is not None and 'selectBox-disabled' in extra:
+            continue
+        LOG.info('目前还有货的尺码大小: %s; sku_id: %s', d['size'], d['sku_id'])
+    # size_matcher.get_values('')
+    sku_id = input('请选择你需要尺码对应的sku_id: ')
+    d = size_matcher.find_with_arg({'sku_id': sku_id})
+    LOG.info(str(d))
 
 
 # List<Dict>
