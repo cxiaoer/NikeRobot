@@ -274,7 +274,8 @@ def get_order_param(product_index_url):
     LOG.info('提取出的在售信息:%s', in_stock_matcher)
     user_select_pid = input('请输入你要选择的pid: ')
     if user_select_pid != selected_pid:
-        new_pd_url = in_stock_matcher.find_with_arg({'pid': user_select_pid})
+        new_pd_url = in_stock_matcher.find_with_arg(
+            pid=user_select_pid, )['pd_url']
         pd_content = session.get(new_pd_url).text  # 重新获取一次其他参数
     # 构造订单参数
     param_area = RegexMatcher('<form\s*?action=""\s*?method="post"\s*?'
@@ -289,6 +290,12 @@ def get_order_param(product_index_url):
                                         '\s*?(value=(?P<value>.*?))?\s*?/>'). \
         match(param_area)
     LOG.debug('通用参数信息:%s', common_param_matcher)
+    common_param_d = {}
+    for d in common_param_matcher.get_values(''):
+        if len(d) is not 2:
+            continue
+        common_param_d[d['key']] = d['value']
+    LOG.info(str(common_param_d))
     # 用户选择尺码和大小
     size_matcher = RegexMatcher('<option\s(?:class=\"(?P<extra>.*?)\")?\s'
                                 '*?name=\"skuId\"\s*?value=\"'
@@ -302,7 +309,7 @@ def get_order_param(product_index_url):
         LOG.info('目前还有货的尺码大小: %s; sku_id: %s', d['size'], d['sku_id'])
     # size_matcher.get_values('')
     sku_id = input('请选择你需要尺码对应的sku_id: ')
-    d = size_matcher.find_with_arg({'sku_id': sku_id})
+    d = size_matcher.find_with_arg(sku_id=sku_id, )
     LOG.info(str(d))
 
 
