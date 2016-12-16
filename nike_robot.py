@@ -34,7 +34,7 @@ HEADERS = {
 LOGIN_URL = 'https://www.nike.com/profile/login?Content-Locale=zh_CN'
 # 提交订单地址
 PUT_ORDER_URL = 'https://secure-store.nike.com/ap/services/' \
-                'jcartService?&qty=1&rt=json&view=3&'
+                'jcartService?qty=1&rt=json&view=3&'
 MAX_FAIL_TIMES = 100  # 每个下单线程的最大失败重试次数
 MAX_RETRY_TIMES = 200  # 每个下单线程的重新提交订单次数
 # 是否开启调试模式
@@ -203,8 +203,9 @@ class AddToCartTask(Thread):
                         # r.publish('addToCart-notice-channel', 'SUCCESS')
                         break
                     elif res_status == 'wait':  # 下单需要排队,继续下单
-                        LOG.info("排队中......")
-                        time.sleep(random.uniform(2.0, 3.0))
+                        random_wait_time = random.uniform(2.0, 3.0)
+                        LOG.info("排队中......, %.2f 秒后继续重试", random_wait_time)
+                        time.sleep(random_wait_time)
                     elif res_status == 'failure':
                         # 截取失败信息
                         fail_message_pattern = re.compile('message"\s:"(.*?)"')
