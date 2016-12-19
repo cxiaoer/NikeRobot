@@ -239,6 +239,7 @@ def login(param):
     else:
         # key_token = None
         LOG.error('登陆Nike官网失败[%s]!', status_code)
+        sys.exit(1)
 
 
 # 清洗html; 去掉空格以及script标签
