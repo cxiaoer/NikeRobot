@@ -317,6 +317,7 @@ def get_order_param(product_index_url):
     return param_d
 
 
+
 if __name__ == '__main__':
     user_name = input('请输入你的nike用户名:')
     password = input('请输入你的nike密码:')
